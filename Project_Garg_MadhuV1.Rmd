@@ -1,0 +1,1718 @@
+
+---
+title: 'Project - AMOD 5250H'
+author: "Madhu Garg"
+date: 'release date: 18/12/2019'
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    df_print: paged
+    highlight: tango
+    self_contained: yes
+    theme: paper
+    toc: yes
+    toc_depth: 3
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)  #library for data operations
+library(stringr) #library for string operations
+library(Hmisc)   # library for weighted statistical estimates 
+library(weights) #library for weighted comparisons
+library(gridExtra)  # library for alignment of graphs
+library(usmap)   # library for us map plotting
+library(purrr)
+
+memory.size(TRUE)   # set system variables
+
+```
+
+# Data Summary
+
+## Introduction
+
+The American Community Survey (ACS) interviews people across the USA and provides insight into the US population. This helps local officials, community leaders, and businesses understand the changes taking place in their communities. It is the most authentic source for detailed population and housing information about the United States of America.
+
+ACS also makes survey data available to the public. Anyone across the world can download this data from the website. The 2017 American Community Surveys(ACS)- 5-year Public Use Microdata Samples (PUMS) available on the website are samples of the actual responses collected by the American Community Survey between 2013-2017. 
+
+
+*PUMS Dataset Characteristics*
+
+1) The PUMS dataset is very detailed and includes data for nearly every question on the survey. In fact it also include many new variables that were derived from multiple survey responses. 
+
+2) PUMS files for one year contain data on approximately one percent of the United States population.  Thus the PUMS files covering a five-year period, such as 2013-2017, contain data on approximately five percent of the United States population.
+
+3) PUMS files are however a little complicated to use as data is not a one-to-one mapped with the respondents. 
+
+4) As ACS has to keep all the responses strictly confidential, many variables in the PUMS files have been modified. For instance, incomes are "top-coded," and uncommon birthplace or ancestry responses are grouped into broader categories. 
+
+*PUBLIC USE MICRODATA AREAS (PUMAS)*
+
+The most detailed unit of data contained in the PUMS files is the Public Use Microdata Area (PUMA). PUMAs are special non-overlapping areas that partition each state into continuous geographic units. Each unit contains no fewer than 100,000 people.
+
+## Problem Statement
+
+Since the data stores detailed demographic, health, personnel, income and other characteristics of people and households, this data is used as a major source for doing any people or household related analysis in the USA. 
+
+This data also contains detailed information about the people who are suffering from any kind of disabilities. The purpose of this project is to use the disability information to do an exploratory analysis of the people who are suffering from disabilities. 
+
+The main objectives are :
+
+(A) Study the disability pattern in the adult population (>18) in America.
+(B) Compare the income of people suffering from disabilites within themselves.
+(c) Identify the important factors that influence the income of disabled people.
+
+
+## Dataset Description
+
+PUMS person dataset is used in this research. This dataset has 52 variables. Items in the 'person' record include information about the person and the household. Few of the important subjects are - Marital status and marital history, Income, Disability, Occupation, Education, Sex, Citizenship etc. There is a large amount of other important information that is captured in this survey.
+The data available for public use is stored in four large files. So for any country wide analysis, it is important to read records from all four files and merge it into one big dataset.
+
+The  fields used in this project are given below
+
+      DIVISION  -  Division code based on 2010 Census definitions
+      ST     - State code based on 2010 Census definitions code
+      ADJINC - Adjustment factor for income and earnings dollar amounts 
+      PWGTP  - Person weight. Actual number of people  a record in the data file represent
+      AGEP   - Age of a person
+      CIT    - Citizenship status
+      DDRS   - Self-care difficulty
+      DREM   - Cognitive  difficulty.
+      DPHY   - Ambulatory difficulty. 
+      DOUT   - Independent living difficulty
+      DEYE   - Vision difficulty
+      DEAR   - Hearing difficulty
+      DIS    - Disability recode
+      ENG    - Ability to speak English
+      INTP   - Interest, dividends, and net rental income past 12 months
+      OIP    - All other income past 12 months
+      RETP   - Retirement income past 12 months
+      SEMP   - Self-employment income past 12 months
+      WAGP   -  Wages or salary  income past 12 months
+      PINCP  - Total person's income past 12 months
+      SCHL   - Educational attainment
+      SEX    - Sex of the person
+
+The detailed definition of these fields are stored in the appendix.
+
+## Dataset Creation
+
+Since the dataset is large, the reading of data files is performed in two steps. 
+
+Step 1 : A very small number of records are fetched from each file to check the data structure and file consistencies. The total number of columns and order of columns are matched.
+
+Step 2 : This step comprises constructing an array of variables that are to be used in the project. Only these variables are read from the files. The records of people having  disabilities are extracted from the file. Remaining records are removed from the memory. This helps in efficient reading of the records. The final dataset is created by merging stored records.
+
+These two steps are executed in the below section:
+
+*Step 1 : Fetch the data from 4 files :*
+
+```{r}
+
+# Code here
+# set systems options
+options(scipen=999,"digits"=5)
+
+# Set the working directory for files
+#setwd("D://rclass/ProjectCourse")
+
+# Create a vector of fields name used in datafiles for storing disabilties and  
+# income information.
+# combine it with the common person record variables to get the final set of fields
+
+dis.param    <-  c("DDRS","DEAR","DEYE", "DOUT","DPHY","DREM")
+income.param <-  c("ADJINC", "INTP","OIP", "RETP", "SEMP", "WAGP","PINCP","PWGTP")
+initial.param <-  c("DIVISION","ST","DIS","AGEP","CIT","SEX","ENG", "SCHL",
+                      dis.param,income.param)
+
+# Fetch 200 records check the consistency of the files and compare the columnn.
+
+pusa.200row <- read.csv("psam_pusa.csv", nrow=200)
+pusb.200row <- read.csv("psam_pusb.csv", nrow=200)
+pusc.200row <- read.csv("psam_pusc.csv", nrow=200)
+pusd.200row <- read.csv("psam_pusd.csv", nrow=200)
+
+# check that number of columns are same
+
+person.ncol <- ncol(pusa.200row)
+col.countCheck <- ((ncol(pusa.200row) == c (ncol(pusb.200row),
+                                            ncol(pusc.200row), 
+                                            ncol(pusd.200row))))
+
+# check that name and order of columns are same in all four files
+
+person.colList <-colnames(pusa.200row)
+
+col.orderCheck <- ((person.colList == c(colnames(pusb.200row), 
+                                        colnames(pusc.200row), 
+                                        colnames(pusd.200row))))
+
+print(paste("Is Number of Columns same in all files?  - ",unique(col.countCheck)))
+print(paste("Is Order of columns same in all files?  -  ",unique(col.orderCheck)))
+
+```
+
+*Step 2 :  Fetch the actual data*
+
+First, a list of variables to be read is created.
+
+```{r}
+
+# Get the index of the variables to be read
+
+person.varIndex <- sort(which(names(pusa.200row) %in% initial.param))
+
+# set the datatype to character for the variables to be read and NUll for others
+
+person.fetchVar <- c(rep("NULL",person.varIndex[1]-1),"character")
+
+for(counter in 2:(length(person.varIndex)))
+{
+  
+  person.fetchVar <-c(person.fetchVar,
+                      rep("NULL",person.varIndex[counter]-
+                            person.varIndex[counter-1]-1),"character")
+}
+
+person.fetchVar <-c(person.fetchVar,rep("NULL",
+                                        person.ncol-person.varIndex[counter]))
+
+
+# remove the dataset not read in step one
+rm(pusa.200row, pusb.200row, pusc.200row, pusd.200row)
+
+
+```
+
+Second, the actual files are read and merged.
+
+```{r}
+
+#Code here
+
+# read the files and filter the records with no disability
+
+# set disabilties code
+
+dis.code <- "1"
+
+# File 1 processing 
+pusa.rec <- read.csv("psam_pusa.csv",  colClasses = person.fetchVar)
+
+# Extract the disabilites records
+pusa.rec <- pusa.rec %>%
+  filter((DIS==dis.code))
+
+#File 2 processing 
+pusb.rec <- read.csv("psam_pusb.csv",  colClasses = person.fetchVar)
+
+# Extract the disabilites records
+pusb.rec <- pusb.rec %>% 
+  filter((DIS==dis.code))
+
+#File 3 processing
+pusc.rec <- read.csv("psam_pusc.csv",  colClasses = person.fetchVar)
+
+# Extract the disabilites records
+pusc.rec <- pusc.rec %>%
+  filter((DIS==dis.code))
+
+# Read file 4
+pusd.rec <- read.csv("psam_pusd.csv",  colClasses = person.fetchVar)
+
+# Extract the disabilites records
+pusd.rec <- pusd.rec %>%
+  filter((DIS==dis.code))
+
+#Merge the files
+
+person.df <- bind_rows(pusa.rec,pusb.rec,pusc.rec,pusd.rec)
+
+#count the records
+total.row <- nrow(person.df)
+
+#remove the read dataset
+rm(pusd.rec,pusa.rec,pusb.rec,pusc.rec)
+
+# Print the high level record statistics
+
+paste("Total number of rows in the data set: ", total.row)
+```
+
+There are `r total.row'  disabilities records fetched from the ACS survey files. A high level description of data fields is given below:
+
+```{r}
+
+#get the datatype description
+str(person.df)
+```
+
+
+There are a few points that need attention:
+
+a) Variables names are very cryptic. So better naming of variables is required.
+
+b) The income adjustment factor should be applied to get better income predictions.
+
+c) Datatypes are read in character format and need to be converted into numeric or factor as required.
+
+d) Variables which are categorical in nature have levels - "1" and "2". Level 2 corresponds to false value in most cases. It is better to convert factors to 0 and 1
+
+e) Some variables have blank values. It is better to convert blank values into null(NA) values.
+
+## Data Preprocessing
+
+This section starts with defining correct datatypes for the attributes, factoring them and giving meaningful names to the factors.  Later, a high level summary of the dataset is analysed to ensure that data is ready for further analysis. 
+
+*Datatype Conversion*
+
+```{r}
+#code here
+#Convert all the disbility parameters to 0 and 1 instead of 1 and 2.
+#Convert all the blank value to NA.
+
+#define the constants used in the code
+dis.no  <- "2" # no disability
+empty.str <-""
+dis.no.new <-"0"
+adj.dividby = 100000
+
+for( fld.idx in 1:(length(dis.param)))
+{
+  person.df[person.df[dis.param[fld.idx]] == 
+              dis.no,dis.param[fld.idx]] <- dis.no.new
+  
+  person.df[person.df[dis.param[fld.idx]] == 
+              empty.str,dis.param[fld.idx]] <- NA
+}
+
+person.df[person.df["ENG"] == empty.str,"ENG"]<-NA
+
+# Calculate total disability score by creating temporary variables.
+# These variables are used to sum up the number of difficuties a person is facing
+# Convert variable to numeric or factor datatypes.
+# set adjustment factor to the actual value
+
+person.df <-person.df %>%
+  mutate_at(c(income.param,"AGEP"), as.numeric) %>%  
+  mutate(inc.adjFactor = ADJINC/adj.dividby)%>%
+  mutate(DDRS_temp = DDRS,
+         DEAR_temp = DEAR,
+         DEYE_temp = DEYE,
+         DOUT_temp = DOUT,
+         DPHY_temp = DPHY,
+         DREM_temp = DREM) %>%
+  mutate_at(str_c(dis.param,"_temp"),as.numeric) %>%
+  mutate_at(c(dis.param,
+              "DIS","SEX","ENG","CIT","ST","DIVISION","SCHL"), 
+            as.factor)%>%
+  mutate(dis.score= pmap_dbl(list(DDRS_temp, 
+                                  DEAR_temp,
+                                  DEYE_temp,
+                                  DOUT_temp,
+                                  DPHY_temp,
+                                  DREM_temp),
+                             sum, na.rm =TRUE))%>%
+  select(-one_of(c(str_c(dis.param,"_temp"),"ADJINC")))
+
+#create an array of names of disability variables
+disabled.var <- c("dis.selfCare","dis.hear","dis.sight","dis.selfLiving","dis.physical",
+                  "dis.cognitive")
+
+# create an array of names the income varibles
+inc.var <- c("inc.interest","inc.other","inc.retire","inc.self", "inc.salary","inc.total")
+
+# create an array of the names of adjusted income variables
+inc.var.adj <- str_c(inc.var,".adj")
+
+ 
+# Create a array of the new more meaningful names
+col.names <- c("division","state.code","person.weight",
+               "age","us.citizen","dis.selfCare","dis.hear",
+               "dis.sight","dis.selfLiving","dis.physical",
+               "dis.cognitive","English","inc.interest","inc.other",
+               "inc.retire","education","inc.self", "gender", 
+               "inc.salary","dis.status","inc.total","inc.adjust",
+               "dis.score" )
+
+
+#Rename the columns
+colnames(person.df) <- col.names
+
+# add new adjusted income variable names to the dataset
+person.df[,inc.var.adj] <- NA
+
+# adjust the income by multiplying incomes with adjustment factor. 
+
+for(i in 1:(length(inc.var)))
+{
+  person.df[inc.var.adj[i]] <- person.df[inc.var[i]] * 
+    person.df$inc.adjust
+  
+}
+
+# Give proper names to the factors levels
+person.df <- person.df %>%
+  mutate( 
+    gender = fct_recode(gender, "Female" = "2", "Male" = "1"),
+    dis.selfCare = fct_recode(dis.selfCare, Yes = "1", No = "0"),
+    dis.hear =fct_recode(dis.hear, Yes = "1", No = "0"),
+    dis.sight = fct_recode(dis.sight, Yes = "1", No = "0"),
+    dis.selfLiving =fct_recode(dis.selfLiving, Yes = "1", No = "0"),
+    dis.physical = fct_recode(dis.physical, Yes = "1", No = "0"),
+    dis.status = fct_recode(dis.status, Yes = "1", No = "0"),
+    dis.cognitive =fct_recode(dis.cognitive, Yes = "1", No = "0"),
+    dis.status   = fct_recode(dis.status, Yes = "1", No = "0"),
+    us.citizen = fct_collapse(us.citizen, 
+                              "US.Citizen" =c("1", "2","3","4"),
+                              "Non.US.citizen" = "5"),
+    division =fct_recode(division,
+                         "Puerto Rico" ="0",
+                         "New England" = "1",
+                         "Middle Atlantic" = "2",
+                         "East North Central Midwest" = "3",
+                         "West South Central Midwest" = "4",
+                         "South Atlantic" = "5",
+                         "East South Central South" = "6",
+                         "West South Central" ="7",
+                         "Mountain" = "8",
+                         "Pacific" ="9"))
+
+#  print the high level datatype view to check the status
+str(person.df)
+
+```
+
+The meaningful names have been assigned to all the variables and data types are set as per the specification given in the data dictionary. Now create a high level summary to have a quick glance at the data.
+
+```{r}
+summary(person.df)
+
+```
+
+The summary has a large amount of data points. Some major points that can be observed are:
+
+a) The summary does not use weight parameters. Actual values may vary depending on the weights used.
+
+b) The microdata provided by ACS has many missing values. 
+
+c) Some of the categorical variables have as many levels as 25. These variables can be regrouped in more meaningful categories based on the situation.
+
+e) There are people in the system who are facing all six difficulties in life (dis.score=6). 
+
+f) "ENGLISH" has many missing values. So this sample is not a good sample for language based analysis.
+
+g) The sample has an almost equal number of male and females records.
+
+h) For the age variable, mean and median are almost equal which shows that age may be normally distributed in this sample. Further, one-fourth of the population is above the age of 60. 
+
+6) Although there are 52 states, yet most of the disability population is from the same 6 states.
+
+## Detailed Data Analysis 
+
+This section examines different variables of the data to understand its overall structure. Here various graphs and  summaries are created to ensure that data is properly studied from different angles.
+
+*State-wise Distribution of people with Disability*
+
+The state wise code is stored in another csv file. So it is important to read that file first. Here the state file is read from the desktop and split into state and state code. 
+
+```{r}
+
+# Get the states and their codes from the state code file
+state.rec <-read.csv("StateCode.csv",header=TRUE)
+
+# get a glimpse of few data records 
+
+#Split the state records
+state.df <- state.rec %>%
+  separate(STATE,"\\.", into = c("state.numcode", "state")) %>%
+  separate(state,"/", into = c("state.name", "state.chrcode")) %>%
+  mutate (state.numcode = as.numeric(trim(state.numcode)))
+
+head(state.df)
+```
+
+The codes are now joined with  person  dataset  on state code to get the count for each state.
+
+```{r}
+# join with person record to add state code and get the distribution of
+# the disables peole in each state
+
+state.dis.count <- person.df %>%
+  filter(dis.status == "Yes") %>%
+  mutate(state_code_temp = as.numeric(state.code)) %>%
+  inner_join(state.df,by = c("state_code_temp" = "state.numcode"))%>%
+  group_by (state.chrcode, state.name) %>%
+  summarise(count = sum(person.weight))%>%
+  arrange(desc(count))
+
+# Display the distribution
+state.dis.count
+
+```
+
+So maximum population of the people suffering from any disability is in Arkansas(`r state.dis.count$count[1]` people) and the smallest population is in Virginia (`r state.dis.count$count[47]` people).
+
+This population can be plotted on the USA map for better representation.
+
+```{r}
+#code starts here
+
+# Select the variables needed for the plot
+state.dis.count <-state.dis.count %>%
+  select (state.chrcode,count)
+
+# Rename the variables as needed
+colnames(state.dis.count) <- c("state", "count")
+
+#plot the distribution on the USA map
+plot_usmap(data = state.dis.count, values = "count", color = "red") + 
+  labs(title = "The Unites States of America",
+       subtitle = "Distribution of People Suffering from 
+           Disabilities Across State")+
+  scale_fill_continuous(
+    low = "white", high = "blue", 
+    name = "Distribution(  disabled People) ", 
+    label = scales::comma ) + 
+  theme(legend.position = "right")
+
+# remove the temporary dataset created
+rm(state.dis.count)
+```
+
+*Disability Spread by Gender*
+
+```{r}
+
+#plot the disability spread for the male and female gende
+
+person.df %>%  group_by(gender) %>%
+  summarise(person.count = sum(person.weight))%>%
+  ggplot(aes(gender, person.count, dis.status)) +
+  geom_bar(stat = "identity") +
+  xlab("Gender")+
+  ylab("Count")+
+  theme(legend.position="none")+
+  ggtitle(" Disability Distribution (Male Vs Female)")
+```
+
+From the graph it is clear that the male and female populations are both equally impacted by disabilities.
+
+*Disability distribution by Disability type *
+
+```{r}
+#code starts here
+
+# Conoslidate disability records in one column
+# Create a new column by concatenating disability name with its status
+
+disable.df <- person.df %>% 
+  gather(key = "dis.name",value = "dis.YN",
+         dis.selfCare,dis.hear,dis.sight,
+         dis.selfLiving,dis.physical,dis.cognitive)%>%
+  mutate (disName.status = str_c(dis.name, "_", dis.YN)) 
+
+# create the bar chart
+disable.df %>% 
+  filter(dis.YN =="Yes" ) %>%
+  group_by(disName.status) %>%
+  summarise(person.count = sum(person.weight))%>%
+  ggplot(aes(disName.status, person.count, fill=disName.status)) +
+  geom_bar(stat = "identity") +
+  xlab("Disability Type")+
+  ylab("Population Count")+
+  theme(legend.position="none")+
+  ggtitle("Population Count by Disability Status") +
+  scale_x_discrete(labels=c("dis.selfCare_Yes" = "Self Care", 
+                            "dis.hear_Yes" = "Hear",
+                            "dis.sight_Yes" = "Sight",
+                            "dis.selfLiving_Yes" = "Self Living",
+                            "dis.physical_Yes" = "Physical",
+                            "dis.cognitive_Yes" = "Cognitive"))
+
+```
+
+It is clear that the population of people suffering from  physical disabilites is highest.  However, population in other categories is also substantial.
+
+*Disability Distribution by Age*
+
+```{r}
+
+#check the age distribution
+ggplot(person.df, aes(x=age, weights = person.weight)) +
+  geom_histogram(binwidth=10, alpha=1/2)+
+  xlab("Age Interval")+
+  ylab("Disability Population Count")+
+  ggtitle("Disability Population Chart (Age wise)")+
+  theme(legend.position="none") 
+
+
+```
+
+It can be concluded that people, between 45 to 85 years of age, tend to suffer from disabilities more. The maximum number is found in the range of 62 to 65 years. Many reasons can be responsible for this. 
+
+* First, in the lower age category only children who have disability by birth will be present. So the count is very low.
+
+* During old age, people develop self care, hearing, sight and physical (accidental or age related) disabilities. Hence, the number is higher in this age range.
+
+* The overall population after 85 is usually low in any country. This explains the smaller number in categories above the age of 85.
+
+Once the sample dataset is finalized. A Q-Q plot can give better insight into age distribution.
+
+# Methodology
+
+This section focuses on understanding data discrepancies and inconsistencies such as missing data, outliers, and the impact of income adjustment factors and person weights on the data. 
+
+## Missing data issue
+
+The microdata provided by ACS has many missing values. However, not all of the records that have missing values can be considered to be faulty data.  Some of the missing values could be due to design. For example, the income of a five year old child. An in-depth analysis can help in finding the scenarios where records having missing values need to be discarded or kept. 
+
+It is important to have a look at the missing values present in the dataset.
+
+```{r}
+
+# get the missing values count and transpose
+missingValues <- person.df %>%
+  summarise_all(funs(sum(is.na(.)))) %>%   
+  t() 
+
+# rename the column, sort and display the result
+
+colnames(missingValues) <- c("Missing.Value.Count" )
+
+missingValues
+
+```
+
+*Observation*
+It seems there are many variables with missing values. However, most of these are either income variables (starting with "inc") or disability variables (starting with "dis"). One reason for these missing values can be that these values are not applicable for children. Hence, the adult population data needs to be extracted and examined.
+
+```{r}
+
+# find out the missing values for adult population
+
+missingValues <- person.df %>%
+  filter(age > 18)%>%
+  summarise_all(funs(sum(is.na(.)))) %>% 
+  t() 
+
+# rename the column, sort and display the result
+colnames(missingValues) <- c("Missing.Value.Count" )
+
+#Check the missing value record
+missingValues[!(missingValues ==0)]
+
+```
+
+There are no missing values for the adult population except in one case. This variable can be examined at the time of analysis. Hence no special handling of missing values is required in this project. 
+
+## Weights Adjustments
+
+AS "THE PUBLIC USE MICRODATA SAMPLE (PUMS)" datasets used in the project have been created using a data unit called PUMA ( Public Use Microdata Area), each record in this dataset is a group of people selected from a specific area. The total number of people selected are stored in the "weight" variable whereas the record contains the average of the people in that group. Thus the numeric variables need to be multiplied by the weight in order to get the actual values, whereas for categorical variables the sum of the weights should be taken instead of the count. This adds to the complexity of the task. Standard statistical tools may not give accurate results in  few  situations.
+
+While this behavior would definitely impact the summary variables such as the mean and the median, its impact on the absolute ratio type statistics such as standard deviation, variance and root mean square errors,  needs to be checked. The graphical distribution of the data may not experience any other impact apart from an increase in the magnitude of the quantity. However, that also will depend on the type of plotting.
+
+The code below checks the impact of weight on basic statistical measures.
+
+*Categorical Variables*
+
+```{r}
+# code starts here
+# Sum up the number of records for disabilities
+
+#hearing disabilties
+hear <-  person.df %>%   
+  group_by (dis.hear) %>%
+  summarise ( count.hear = sum(person.weight))
+
+#Sight disabilties
+sight <-  person.df %>%   
+  group_by (dis.sight) %>%
+  summarise ( count.sight = sum(person.weight))
+
+#get the total disability status and join with the other disabilties
+
+person.df %>% group_by (dis.status)%>%
+  summarise ( count.dis = sum(person.weight))%>% 
+  inner_join (hear, by = c("dis.status" = "dis.hear")) %>%
+  inner_join(sight,by = c("dis.status" = "dis.sight"))
+
+# count the number of records for disabilities
+
+person.df %>% select (dis.status,dis.hear, dis.sight) %>%
+  sapply(table) %>% t()
+```
+
+As observed from both the tables, there is considerable difference between the number of records and the total number of people for different categorical variables. It is better to consider number of people instead of the count of records when doing various statistical tests as the weight may impact results.
+
+*Continuous Variable*
+
+```{r}
+# calcualte the mean and variance without weights and with weights
+
+person.df %>% summarise(inc.mean = mean(inc.total.adj,na.rm = TRUE ),
+                        inc.wght.mean = wtd.mean (inc.total.adj,
+                                                  na.rm = TRUE,weights =person.weight),
+                        inc.var = var(inc.total.adj,na.rm = TRUE),
+                        inc.wght.var = wtd.var(inc.total.adj,na.rm = TRUE,
+                                               weights =person.weight))
+
+```
+
+It is clear that there is difference in the mean and the variance of the total income when the count of people is taken into account. So the best way is to take the weighted values while performing statistical tests. Even the percentage may vary as weights are uneven for different records. Another alternative option is to generate two statistical models, one with weights and another without weights, and then compare the results. 
+
+For this project, weighted values are used.
+
+## Top Coded and Bottom Coded Values
+
+Several variables selected for income analysis are top and/or bottom coded in ACS survey. The list of coded fields that are used in this project is given below:
+
+AGEP - Age (Top Coded)
+OIP  - All other income past 12 months(Top Coded)
+RETP - Retirement income past 12 months (Top Coded)
+WAGP - Wages or salary income past 12 months(Top Coded)
+INTP - Interest, dividend and net rental income pass 12 months(Top & Bottom Coded)
+SEMP - Self-employment income past 12 months (Top & Bottom Coded)
+
+The values for top coded and bottom coded variables are derived based on the following rules:
+
+1. Age and all base dollar amounts are top coded using the state mean of all cases greater than or equal to the top-coded state threshold value.
+
+2. Income variables that can have negative values (Self-employment Income, or SEMP, and Interest, Dividends, and Net Rental Income, or INTP) are bottom coded using the state mean of all cases less than or equal to the bottom-coded state threshold value.
+
+The top coded and bottom coded values may impact the analysis considerably depending on the sample selected.
+
+a) Age is top coded in the data set. However, the main dataset used for analysis is taken for the adult population with age<= 65. Hence top coded values for the age will not impact the analysis.
+
+
+b) The income variable used in the analysis is a sum of all other incomes. This means the bottom coded and top coded values might impact the results. It is important to check whether there are records in the sample population containing top coded income variables.
+
+```{r}
+
+#Code here
+
+# Read the statewise top coded and bottom code values 
+codedval.rec <-read.csv("2018_pums_top_and_bottom_coded_values.csv")
+
+# get a glimpse of data struture 
+str(codedval.rec)
+
+```
+
+
+```{r}
+#Append state code to the top coded and bottom coded file and select 
+# the relvant fields.Use state dataset generated previously
+
+codedval.df <-codedval.rec %>% 
+  inner_join(state.df, by = c("BST" = "state.numcode") )%>%
+  select(BST,state.chrcode,state.name,T_WAG,T_SEM,B_SEM,B_INT,
+         T_INT,T_RET,T_OI,T_AGE)
+
+#Rename the variables
+
+colnames(codedval.df) <- c("state.numcode","state.chrcode", "state.name" ,
+                           "top.inc.salary","top.inc.self", "btm.inc.self",
+                           "btm.inc.interest","top.inc.interest",
+                           "top.inc.retire", "top.inc.other", "top.age" )
+# Count the number of rows
+
+state.no <- nrow(codedval.df)
+paste ("Total number of top coded or bottom coded records:",state.no)
+
+```
+
+The file has records for  `r state.no` states. There is no missing value in the data. Now the records are extracted from the sample dataset which has top coded or bottom coded values.
+
+```{r}
+
+# code start here
+
+#  the  sample for adult population having one disability
+
+inc.sample <- person.df %>%
+  mutate ( state.numeric_temp = as.numeric(state.code)) %>%
+  inner_join(codedval.df, by = c("state.numeric_temp" = "state.numcode"))%>% 
+  mutate(state.chrcode = as.factor(state.chrcode)) %>%
+  filter(dis.score ==1)%>%
+  filter (age >=18)
+
+#  the  sample for adult population having one disability and 
+#no top coded or bottom coded values
+
+inc.sample.nocodedvalue <- inc.sample %>%
+  filter(!(top.inc.salary == inc.salary) |
+           (top.inc.self == inc.self)| 
+           (btm.inc.self == inc.self)|
+           (btm.inc.interest ==inc.interest) |
+           (top.inc.interest == inc.interest)| 
+           (top.inc.retire ==inc.retire) |
+           (top.inc.other ==inc.other))
+
+#print the total no of records
+
+paste ("Total Records in the sample dataset :",nrow(inc.sample))
+
+# print the total number of records
+paste ("Total records after removing top coded and bottom coded values : " ,
+       nrow(inc.sample.nocodedvalue))
+
+
+```
+
+There is no top coded or bottom coded record in the sample data. 
+
+## Income Adjustment Factor
+
+Since this survey was spread over five years, ACS has given an adjustment factor to adjust the income for inflation.  The income variables must be multiplied with the adjustment factor to get the actual income of a person. An analysis without considering the adjustment factor may impact the results of statistical tests. One simple check is to calculate the difference in the standard statistical parameters like the mean and the variance due to income adjustment.
+
+```{r}
+# the mean and the variance with adjustment
+
+inc.sample %>% summarise( inc.adj.mean = wtd.mean (inc.total.adj,na.rm = TRUE, 
+                                                   weights =person.weight),
+                          inc.adj.var = wtd.var(inc.total.adj,na.rm = TRUE, 
+                                                weights =person.weight))
+
+
+# mean and variance without adjustment
+
+inc.sample %>% summarise( inc.mean = wtd.mean (inc.total,na.rm = TRUE,
+                                               weights =person.weight),
+                          inc.var = wtd.var(inc.total,na.rm = TRUE,
+                                            weights =person.weight))
+
+```
+
+There is a difference in the mean and variance of the adjusted and the unadjusted incomes. So either only adjusted values should be taken, or both samples should be analysed and then compared. For this project, adjusted values are used for all statistical analysis.
+
+## Outliers
+
+An outlier is an observation which stands far away from most of the other observations. An outlier may or may not be due to measurement errors. Therefore, one of the most important task in data analysis is to identify and (if necessary) remove the outliers.
+
+There are two continuous variables, income and age, in the dataset which need to examined closely for outliers.
+
+```{r}
+# check the age distribution
+age.plot <- ggplot(inc.sample, aes(x=age, weights = person.weight)) +
+  geom_histogram(binwidth=10, alpha=1/2)+
+  xlab("Age Interval")+
+  ylab("Disability Population Count")+
+  ggtitle("Disability Count vs Age ")+
+  theme(legend.position="none")
+
+#Create qq-plot
+age.qplot <-ggplot(inc.sample, aes(sample=age,weights = person.weight ))+
+  stat_qq()+
+  ggtitle("QQ Plot for Age")+
+  theme(legend.position="none")+
+  xlab("Theoretical Age")+
+  ylab("Sample Age ")
+
+# arrange the plots in a grid
+grid.arrange(age.plot,age.qplot, ncol=2 )
+```
+
+This sample is normally distributed with a slight skew towards the right. The data on the left side has been filtered out so there are no records below 18 years of age.  The QQ-Plot is flat at the edges. The impact of this needs to be studied carefully while performing statistical analysis. 
+
+*Outliers in the Income Data *
+
+Since the income of a person depends on many factors, this variable is highly susceptible to uneven distribution. The histogram for the income is generated below.
+
+```{r}
+
+#The income variable here is divided by 10000 to get better insight
+ggplot(inc.sample, aes(x=inc.total.adj/10000, weights = person.weight)) +
+  geom_histogram(binwidth=10, alpha=1/2)+
+  xlab("Income Interval")+
+  ylab("Income(in multiple of 10000)")+
+  ggtitle("Disability Population Distribution - Income wise")+
+  theme(legend.position="none") 
+```
+
+This chart shows that there is a very small group of people in the high income range. However the curve on the right side starts at high income. This may be due the fact that the population considered here is the adult population. Their salary increases till the age of retirement and then drops drastically after that. 
+
+## Concluding Remark
+
+Initial thought process was to understand the status of the people suffering disabilities in life in the USA.  The idea was to know the difference between the income of the people with disabilities and without disabilites. However as the project progressed, that particular analysis looked very straight forward as it is very well known that disabled people usually do not get the same kind of opportunities as people with no disabilities. So instead, it was decided to compare the income of the people having different disabilities within themselves. During this process,  focus will also be on identifying the factors that determine the income of the people facing disabilities.
+
+There are a few assumptions which are made in this project. Firstly, the sample surveyed is a random sample and secondly, the sample is from the population which has same disability distribution division wise, age wise and gender wise. The statistical tests to verify these assumptions could not be performed as the required population statistics were not available.
+
+# Findings
+
+This section covers the detailed analysis performed on the sample dataset to identify the factors that influences the income of people suffering from disabilities. 
+
+## Overview
+
+The income of a person depends on a large number of parameters. Attributes may vary from the age and education of a person to the availability of an opportunity at right time or family conditions. This situation may be different for a disabled person as they have extra constraints. Some favors that can be looked at are age, gender, State of residence, disability type, and education. 
+
+Further the income may also be influenced by other factors like the number of disabilites, their English speaking capability and their citizenship status. While it would not be possible to identify all biases, it was ensured that the sample data consists of only people who 
+
+* have only one disability, 
+* are adults
+* have no top coded or bottom coded values
+* have income adjusted for inflation
+
+
+The initial sample dataset created in methodology section can  be taken as the input for this analysis.
+
+
+## Statistical Methods Selection
+
+As there are more than two factors to be analysed and there are six disability types, it is not possible to use linear regression or t-test. Two major analysis that can be used are  -  Anova analysis to understand the difference between incomes, and  multiple regression for identifying influencing factors.
+
+### Anova Analysis
+
+The null hypothesis here is that there is no significant difference among the income of people with different disabilities. 'avov' function can be used to do the statisticial testing.
+
+The first step is to examine the data graphically.
+
+```{r}
+
+# Inspect the data graphically
+# Gather the data so that disabilities are consolidated in one column. 
+# Filter all the records which have no disabilities.
+
+inc.dis.row <- inc.sample %>% 
+  select(dis.selfCare,dis.hear,dis.sight,
+         dis.selfLiving,dis.physical,dis.cognitive,
+         inc.total.adj,person.weight) %>%
+  gather(key = "dis.name",value = "dis.YN",
+         dis.selfCare, dis.hear, dis.sight,
+         dis.selfLiving, dis.physical,
+         dis.cognitive )%>%
+  filter(dis.YN =="Yes") %>%
+  mutate ( dis.name = fct_recode(as.factor(dis.name),
+                                 "Self Care" ="dis.selfCare", 
+                                 "Hear" = "dis.hear" ,
+                                 "Sight" = "dis.sight" ,
+                                 "Self Living" = "dis.selfLiving",
+                                 "Physical" = "dis.physical" ,
+                                 "Cognitive" = "dis.cognitive" ))
+
+
+#plot the income distribution chart for each disabilities
+
+inc.dis.row %>%
+  ggplot(aes(inc.total.adj/100000,weight = person.weight)) + 
+  facet_wrap(~dis.name, scale="free") + 
+  geom_histogram(binwidth=8, alpha=1/2)+
+  ggtitle("Income Distribution Chart") +
+  xlab("Income Ranges( in Multiple of $100000)") + 
+  ylab("Population Count")
+
+```
+
+Although the distribution pattern is same for all the disabilities, incomes are different for the people having different disabilities. A statistical test must be used to find if there is a significant difference in the incomes.
+
+```{r}
+# code Starts
+# implement the weight factor
+
+inc.dis.row <- inc.dis.row%>%
+  mutate(inc.weight.adj = inc.total.adj*person.weight)
+
+#Generate the Anove(Aov model)
+
+inc.aov <- aov(inc.weight.adj ~ dis.name  - 1, inc.dis.row)
+inc.aov.intercept <- aov(inc.weight.adj ~ dis.name, inc.dis.row)
+
+#print the summary
+summary(inc.aov)
+
+```
+
+As the p-value is less than 0.05, it is clear that at 5% level of significance,  there are evidences that a significant difference exists in the incomes of people suffering from  different disabilities. The difference between the groups can be checked by making a plot of the group means and confidence intervals.
+
+```{r}
+#code starts here
+# Plot the confidence Interval
+inc.dis.row %>% group_by(dis.name) %>%
+  summarise(dis.mean=weighted.mean(x= inc.total.adj, w=person.weight),
+            dis.sd=sqrt(wtd.var(x=inc.total.adj,w=person.weight)),
+            Length=NROW(inc.total.adj),
+            tfrac=qt(p=.90, df=Length-1),
+            Lower=dis.mean - tfrac*dis.sd/sqrt(Length),
+            Upper=dis.mean + tfrac*dis.sd/sqrt(Length)
+  ) %>%
+  ggplot(aes(x=dis.mean, y=dis.name)) + geom_point() +
+  geom_errorbarh(aes(xmin=Lower, xmax=Upper), height=.3) +
+  scale_y_discrete(labels=c("dis.selfCare" = "Self Care", 
+                            "dis.hear" = "Hear",
+                            "dis.sight" = "Sight",
+                            "dis.selfLiving" = "Self Living",
+                            "dis.physical" = "Physical",
+                            "dis.cognitive" = "Cognitive"))+
+  ggtitle("Income Mean by Disability type") +
+  xlab("Income Mean") + 
+  ylab("Disability Type")
+
+```
+
+
+This shows there is significant difference in the average income of people suffering from different disabilities.
+
+There can be many factors leading to this result such as 
+
+1) Education level
+
+2) State or Division of residence
+
+3) Gender
+
+4) Age
+
+5) Citizenship status
+
+6) Disability type
+
+
+### Multiple Regression Model
+
+Multiple regression analysis is a technique used to fit a model to predict the unknown value of a variable from the known value of two or more variables that are also called the predictors. Multiple regression assumes that there is a linear relationship between the dependent variable and the predictors. It can be used for categorical variables also.
+
+Before the analysis, it is important to examine the relationship between the variables.
+
+*Citizenship status*
+
+A table is created to store the count of people with US and Non-US citizenship.
+
+
+```{r}
+#Code starts here
+
+#create a new dataset with the predictor variables selected
+
+inc.reg.df <- inc.sample %>%
+  select(state.code, state.chrcode,state.name,division,
+         gender, age, education, 
+         us.citizen, dis.score, dis.status,
+         dis.selfCare,dis.hear,dis.sight,
+         dis.selfLiving,dis.physical,dis.cognitive,
+         inc.total.adj,person.weight ) %>%
+  mutate (inc.total.adj = inc.total.adj/1000)
+
+
+# count the number of the people based on citizenship
+inc.reg.df %>% group_by (us.citizen) %>%
+  summarise (count = sum(person.weight))
+
+```
+
+This  clearly indicates that there is a  small number of the people who are not US citizens. This may lead to high variance during statistical analysis of the income data. Hence, these records are dropped from the sample.
+
+```{r}
+# filter the non US citizen record
+inc.reg.df <- inc.reg.df  %>% filter(us.citizen == "US.Citizen")
+```
+
+*Age*
+Age is an important factor which can impact the income. A scatter plot can be used to examine the data visually.
+
+```{r}
+# plot the graph for age
+
+age.all <-ggplot(inc.reg.df, aes(x = age, y = inc.total.adj, 
+                                 weights = person.weight)) +
+  geom_point() +
+  ggtitle("Income Chart (adult Pop.)") +
+  xlab("Age") + 
+  ylab("Income") 
+
+#filter the records for age <=65
+
+inc.reg.df <- inc.reg.df %>%
+  filter(age <=65)
+
+#create a box plot for the people having age <=65
+age.below65 <- ggplot(inc.reg.df, aes(x = age, y = inc.total.adj, 
+                                      weights = person.weight)) +
+  geom_point() +
+  ggtitle("Income Chart (age <65)") +
+  xlab("Age") + 
+  ylab("Income") 
+
+# arrange the plot in a grid
+grid.arrange(age.all,age.below65, ncol =2 )
+
+```
+
+From the chart it is clear that although there is a pattern that the income increases with age, there is a large variation in the income. It is also very clear that at the later stages of life, income suddenly drops. This seems reasonable as the income decreases after retirement age. Thus, records below the age of 65 can be used for analysis.
+
+*Correlation Computation*
+
+```{r}
+
+# find out the correlation
+
+with (inc.reg.df,wtd.cor(age,inc.total.adj,weight=person.weight,mean1=FALSE))
+
+```
+This shows a positive linear relationship between the age and the income. Test statistics (=0.17)  indicate a weak association. Since the p-value is  < 0.05, the age is a strong candidate for use in multiple regression analysis.
+
+*Education*
+
+Education is always considered an important factor in determining the income of a person. Although education is a categorical variable, the situation is tricky here as it has as many levels as 24. It is a good idea to plot the points on a scatter plot to see the spread.
+
+```{r}
+
+ggplot(inc.reg.df, aes(x = education, y = inc.total.adj, weights = person.weight)) +
+  geom_point() +
+  ggtitle("Income Distribution(Education)") +
+  xlab("Education") +
+  ylab("Income") 
+
+```
+
+This shows that the income varies at each level. Further, the income is lower at the doctoral level. This could be because people with doctorate degree usually work in education institutes where salaries are not as high as in corporate world. Further there is a very sporadic behavior for education at level 01. These are people who have reported no schooling.  Anova analysis can be done to test the significance of the education variables.
+
+
+```{r}
+
+# Conslidate the total income
+
+inc.reg.df <- inc.reg.df%>%
+  mutate(inc.weight.adj = inc.total.adj*person.weight)
+
+#Generate the Anov(aov model)
+
+inc.aov <- aov(inc.weight.adj ~ education  - 1, inc.reg.df)
+
+#print the summary
+summary(inc.aov)
+
+```
+
+There is significant difference between the income of the people having different level of education. So education will also be considered for multiple regression analysis.
+
+
+*Disability type Analysis*
+
+The initial graph reported a large number of outliers in the boxplot as shown below in the chart. 
+
+```{r}
+
+# Boxplots showing per person income broken down by disability type 
+
+inc.reg.df %>%  gather(key = "dis.name",value = "dis.YN",
+                       dis.selfCare,dis.hear,dis.sight,dis.selfLiving,
+                       dis.physical,dis.cognitive)%>%
+  filter(dis.YN =="Yes") %>%
+  ggplot(aes(x = dis.name, y = inc.weight.adj/1000)) +
+  geom_boxplot() +
+  ggtitle("Income Spread(Disability Type)") +
+  xlab("Disability Type") + 
+  ylab("Income (multiple of $1000")+ 
+  scale_x_discrete(labels=c("dis.selfCare" = "Self Care", 
+                            "dis.hear" = "Hear",
+                            "dis.sight" = "Sight",
+                            "dis.selfLiving" = "Self Living",
+                            "dis.physical" = "Physical",
+                            "dis.cognitive" = "Cognitive"))
+
+```
+
+However outlier records cannot be dropped randomly. Instead, two datasets were created- one with outliers and another without outlier. The analysis was performed on both the records to understand the difference.
+
+```{r}
+#Create dataset with no outliers.
+
+inc.noout  <-   inc.reg.df %>% 
+  filter ( inc.weight.adj < 11000) %>%
+  filter(!(dis.cognitive =="Yes" & inc.weight.adj > 6000)) %>%
+  filter(!(dis.physical =="Yes" & inc.weight.adj > 8000)) %>%
+  filter(!(dis.selfLiving =="Yes" & inc.weight.adj >6000))
+
+
+# Boxplots showing the income broken down by disability type with no outlier. 
+inc.noout %>%  gather(key = "dis.name",value = "dis.YN",
+                      dis.selfCare,dis.hear,
+                      dis.sight,dis.selfLiving,
+                      dis.physical,dis.cognitive)%>%
+  filter(dis.YN =="Yes") %>%
+  ggplot(aes(x = dis.name, y = inc.weight.adj)) +
+  geom_boxplot()+
+  ggtitle("Income Spread(Disability Type- No outlier)") +
+  xlab("Disability Type") + 
+  ylab("Income") +
+  scale_x_discrete(labels=c("dis.selfCare" = "Self Care", 
+                            "dis.hear" = "Hear",
+                            "dis.sight" = "Sight",
+                            "dis.selfLiving" = "Self Living",
+                            "dis.physical" = "Physical",
+                            "dis.cognitive" = "Cognitive"))
+
+
+```
+
+*Gender*
+This is another variable which was explored for an impact on income. Initial analysis indicates outliers in the data. However once the data is filtered for disability types,  the outliers are very small in number and can be ignored.
+
+```{r}
+# Income distribution by Gender
+
+#plot the income with outlier records included
+
+inc.plot.all <- inc.reg.df %>%  
+  ggplot( aes(x = gender, y = inc.weight.adj/1000)) +
+  geom_boxplot()+
+  ggtitle("Income (Male Vs. Female)") +
+  xlab("Gender") + 
+  ylab("Income(multiple of $1000)") 
+
+# dataset with no outlier. The thrashhold vauel has been choosen by hit and trail method
+inc.noout  <-   inc.reg.df %>% 
+  filter ( inc.weight.adj < 8000) 
+
+#plot the income with outliers excluded
+inc.plot.noout <- ggplot( inc.noout, aes(x = gender, y =inc.weight.adj)) +
+  geom_boxplot()+
+  ggtitle("Income  - No Outlier")  +
+  xlab("Gender") + 
+  ylab("Income ") 
+
+grid.arrange(inc.plot.all,inc.plot.noout, ncol=2)
+```
+
+*Division*
+
+The income of a person may also depend on the economy of the division or state in which the person resides. Again the plots are analysed for both datasets.
+
+````{r}
+
+#plot the income with outlier records included
+
+inc.reg.df %>%  
+  ggplot( aes(x = division, y = inc.weight.adj/1000)) +
+  geom_boxplot()+
+  ggtitle("Income(Division wise)") +
+  xlab(" Division") + 
+  ylab("Income(in Multiple of $1000)") +
+  coord_flip()
+
+#plot the income with outliers excluded
+ggplot( inc.noout, aes(x = division, y = inc.weight.adj)) +
+  geom_boxplot()+
+  ggtitle("Income (Division wise) - Few Outliers")  +
+  xlab(" Division") + 
+  ylab("Income") + 
+  coord_flip()
+```
+
+The data has outliers. The boxplot after filtering of outliers is given as :
+
+```{r}
+
+#plot the income with outlier records included
+
+
+inc.noout  <- inc.noout %>%  filter  (inc.weight.adj > -4000) 
+
+inc.noout %>%
+#plot the income with outliers excluded
+ggplot( aes(x = division, y = inc.weight.adj)) +
+  geom_boxplot()+
+  ggtitle("Income ( Division wise) - No Outlier")  +
+  xlab(" Division") + 
+  ylab("Income") + 
+  coord_flip()
+
+```
+
+There are no outliers now, so analysis can be started.
+
+
+```{r}
+#Generate the Anov(aov model)
+
+inc.aov <- aov(inc.weight.adj ~ division  - 1, inc.reg.df)
+
+#print the summary
+summary(inc.aov)
+
+
+```
+
+Since the p-value <0.5, there is a significant difference in the income of people residing in different divisions. This variable is also a candidate for the multiple regression model.
+
+**Multiple Regression Analysis**
+
+There are few transformations that need to be applied before starting regression analysis.
+
+*Centralize the age variable*
+
+The intercept calculated during a multiple regression analysis is essentially the expected value of the response variable when predictor variables are zero. In our case, the income for a person have zero does not make any useful interpretation so it is better to centralize the age variable so that average income can be calculated when the mean age is zero.
+
+```{r}
+#Code starts here
+# centre the mean age
+
+inc.reg.df <- inc.reg.df %>%
+  mutate(age.centre = scale(age, center=TRUE, scale=FALSE))
+
+inc.noout <- inc.noout %>%
+  mutate(age.centre = scale(age, center=TRUE, scale=FALSE))
+
+```
+
+*Collapse the education levels*
+
+Education has a large number of factor levels. Since the income across all the education levels before high school is consistent, the factors can be merged. This will help in better comprehensibility of the model.
+
+```{r}
+#Code start here
+# Combine education level to get more meaning full data 
+# also drop unused levels and select the variables which are to be included in the analysis
+# group disabiltie levle in one variable
+
+str(inc.reg.df)
+inc.reg.set <-  inc.reg.df %>%
+  gather(key = "dis.name", value = "dis.YN", dis.selfCare,
+         dis.hear,dis.sight,
+         dis.selfLiving,dis.physical,dis.cognitive)%>%
+  filter (dis.YN == "Yes") %>%
+  mutate(education = fct_other(education,keep = c("15","16","17","18","19",
+                                                  "20","21","22","23","24")),
+         education = fct_collapse(education, "less than High School" = "Other",
+                                  "High School" =c("15", "16","17","18","19"),
+                                  "Associate" = "20",
+                                  "Bachelors" = "21",
+                                  "Masters" = "22",
+                                  "Professional" = "23",
+                                  "Doctorate" = "24")) %>%
+  droplevels() %>%
+  select(inc.total.adj, gender, age.centre, education,
+         dis.name,inc.total.adj,division,person.weight)
+
+
+inc.noout.set <-  inc.noout %>%
+  gather(key = "dis.name",value = "dis.YN",
+         dis.selfCare,dis.hear,dis.sight,
+         dis.selfLiving,dis.physical,dis.cognitive)%>%
+  filter (dis.YN == "Yes") %>%
+  mutate(education = fct_other(education,keep = c("15","16","17","18","19",
+                                                  "20","21","22","23","24")),
+         education = fct_collapse(education, "less than High School" = "Other",
+                                  "High School" =c("15", "16","17","18","19"),
+                                  "Associate" = "20",
+                                  "Bachelors" = "21",
+                                  "Masters" = "22",
+                                  "Professional" = "23",
+                                  "Doctorate")) %>%
+  droplevels() %>%
+  select(inc.total.adj, gender, age.centre, education,dis.name,
+         inc.total.adj,division,person.weight)
+```
+
+Multiple regression model can now be  generated as given below
+
+```{r}
+
+#Generate the models
+
+inc.lm <- lm(inc.total.adj~ .,data=inc.reg.set,weight = person.weight)
+inc.lm.noout <- lm(inc.total.adj~ .,data=inc.reg.set, weight=person.weight)
+
+#display the summary for dataset containing all records
+summary(inc.lm)
+
+```
+
+```{r}
+
+# Display the summary for dataset with no outlier
+summary(inc.lm.noout)
+
+```
+
+*Interpretations*
+
+* Residuals, the actual difference between the observed income and the income that the model predicted is based on the best fit line. It is evident that model have symmetrical distribution across median for interquartile range.
+
+* Intercept is the average income($ 255.7) expected when values of all the categorical variables are zero and mean age is zero.
+
+* The standard estimate value calculates the average increase in the income with unit change in the variable. For categorical variables, this means the change in the income when that person is aligned with that category. The model strongly suggests that income is most impacted by education. In fact the impact is highest ($774.72) when the person is a professional. On the other hand being a female has a negative impact ($-115.62). This means females earn less than males as per this sample. The place of residence also impacts the income to a certain extent.  Impact of cognitive disabilities could not be determined due to insufficient data.
+
+* The coefficient "standard error" is the average amount that the coefficient estimates vary from the actual average value of the income variable.  A lower number means better results.  However here standard errors are quite high.
+
+* This  interpretation is also clear from the p-values. The p-values for all the variables except a few divisions are less than 0.05. This means place of residence is not that significant in predicting the income of a person.
+
+* The residual standard error shows the variation in the income. Given that its value is very large, it can be inferred that there are factors beyond what are taken into consideration which impact the income.
+
+* The multiple r-square values indicates that 19% variation in the income can be explained using this model. This is quite low. 
+
+* There is almost zero  impact of outliers on the model. One possible reason that for this is the large sample size. In a large sample,  outliers seem to adjust themselves in the dataset as their variations are absorbed by other data points.
+
+Overall it is evident that the variables age, education, gender and disability type are significant predictors of the total income of people suffering from disabilities. However, more factors need to be identified in order to get better predictions.
+
+*Comparison of models*
+
+While multiple regression model indicates that all the variables are important, It is always better to compare the different models. This section analyse the different modal comparison techniques such as ANOVA, AIC and BIC.
+
+First, multiple models are generated using the code below.
+
+```{r}
+
+#Generate models with one factor added at every step
+
+#Single variable models
+
+
+income1 <- lm(inc.total.adj~ age.centre, data=inc.reg.set, weights=person.weight)
+income2 <- lm(inc.total.adj~ education,  data=inc.reg.set, weights=person.weight)
+income3 <-lm(inc.total.adj~ dis.name, data=inc.reg.set, weights=person.weight)
+income4 <-lm(inc.total.adj~ division , data=inc.reg.set, weights=person.weight)
+
+income5 <- lm(inc.total.adj~ age.centre + education , data =inc.reg.set,  weights=person.weight)
+income6 <- lm(inc.total.adj~ age.centre + education+ gender , data=inc.reg.set, weights=person.weight)
+income7 <- lm(inc.total.adj ~ age.centre + education+ gender +
+                dis.name,data=inc.reg.set, weights=person.weight)
+income8 <- lm(inc.total.adj ~ age.centre + education + gender + division +
+                dis.name, data = inc.reg.set, weights=person.weight)
+
+```
+
+*Anova Analysis*
+
+ANOVA generates RSS values for each model. The lower the value, the better is the model.
+
+```{r}
+# code starts here
+# Compare model using anova
+anova(income1, income2, income3, income4,income5, income6, income7,income8)
+
+```
+
+Here the model  'income 4' has the least value of sum of squares. However there is no significant value generated for this model. So this model can not be accepted. Next is model 'income8'. This also has a low value for RSS and is of significant value at 5% level of significance.  So the model income8, where all the variables  - age, gender, disability type, education and  place of residence  are included, is the best model.
+
+*AIC comparison*
+
+This model penalizes model complexity with two times the number of co-efficents. The model with the lowest AIC is considered optimal.
+
+
+```{r}
+
+# AIC comparison
+AIC(income1, income2, income3, income4,income5, income6, income7, income8)
+```
+
+There  is no significant difference in AIC values. However, the model income8 (lowest AIC), where all the variables  - age, gender, disability type, education and  place of residence  are included, performs best. 
+
+*BIC Analysis*
+
+BIC penalizes the model with the log of the number of rows. Again lower values are better.
+
+```{r}
+#Code starts here
+# BIC model comparison
+
+BIC(income1, income2, income3, income4,income5, income6, income7,income8)
+```
+
+The results are same as for AIC. The Model income8, with all variables - age, gender, disability type, education and place of residence performs best (lowest BIC).
+
+Overall, it can be concluded that all the factors are important in determining the income of people suffering from disabilities.
+
+# Conclusion
+
+
+The American Community Survey (ACS) estimates the overall percent of the people with disabilities in the US population in 2017 at 25.8%. This means that one in four adults suffers from one or the other kind of disability. The government needs to gear up and create the proper healthcare facilities for them. They will also need jobs or and financial benefits for support.
+
+This analysis was a small insight into the income variation that is present among people  with disabilities. Education is one of the main contributors towards the income. Authorities should  ensure that people with disabilities get adequate support and encouragement to get higher education. The age, gender and place of residence are a few other factors impacting their income. 
+
+One of the drawbacks of this study is that only 19% variation could be explained using this model. This means more rigor and analysis is required to understand the income spread of disabled people. A few other facts which are observed during this analysis are:
+
+* Disabilities are gender independent.
+
+* The population of the people with disabilities varies greatly by state. In 2017, the state with the lowest population of people suffering from disability was Virginia. The state with the highest number was Arkansas. 
+
+* Incomes of the people vary by type of disability. Income was highest for people with physical disabilities and lowest for people suffering from independent living and self-care disabilities.
+
+Going further, there can be more work done in this area. For example, housing data can help in understanding their poverty status and family dynamics.
+
+Even though maximum effort was expended to perform a through analysis of the dataset, there are still some grey areas in terms of the impact of outliers and variation on the income. The income was highly `scattered. This means alternate models need to be explored to find the best fit model for the income. 
+
+
+
+# Appendix A - Data Dictionary
+
+This appendix  gives detailed definition of each field  used in the project.
+
+**DIVISION**
+
+Division code based on 2010 Census definitions. This is a character field of size 1. IT can have below values
+
+      0 -  Puerto Rico
+      1 -  New England (Northeast region)
+      2 -  Middle Atlantic (Northeast region)
+      3 -  East North Central (Midwest region)
+      4 -  West North Central (Midwest region)
+      5 -  South Atlantic (South region)
+      6 -  East South Central (South region)
+      7 -  West South Central (South Region)
+      8 -  Mountain (West region)
+      9 -  Pacific (West region)
+
+**ST**
+
+State code based on 2010 Census definitions. This a character field of length 2. Each state is assigned a specified code. The complete listing is given below.
+
+      01    -    Alabama/AL
+      02    -    Alaska/AK
+      04    -    Arizona/AZ
+      05    -    Arkansas/AR
+      06    -    California/CA
+      08    -    Colorado/CO
+      09    -    Connecticut/CT
+      10    -    Delaware/DE
+      11    -    District of Columbia/DC
+      12    -    Florida/FL
+      13    -    Georgia/GA
+      15    -    Hawaii/HI
+      16    -    Idaho/ID
+      17    -    Illinois/IL
+      18    -    Indiana/IN
+      19    -    Iowa/IA
+      20    -    Kansas/KS
+      21    -    Kentucky/KY
+      22    -    Louisiana/LA
+      23    -    Maine/ME
+      24    -    Maryland/MD
+      25    -    Massachusetts/MA
+      26    -    Michigan/MI
+      27    -    Minnesota/MN
+      28    -    Mississippi/MS
+      29    -    Missouri/MO
+      30    -    Montana/MT
+      31    -    Nebraska/NE
+      32    -    Nevada/NV
+      33    -    New Hampshire/NH
+      34    -    New Jersey/NJ
+      35    -    New Mexico/NM
+      36    -    New York/NY
+      37    -    North Carolina/NC
+      38    -    North Dakota/ND
+      39    -    Ohio/OH
+      40    -    Oklahoma/OK
+      41    -    Oregon/OR
+      42    -    Pennsylvania/PA
+      44    -    Rhode Island/RI
+      45    -    South Carolina/SC
+      46    -    South Dakota/SD
+      47    -    Tennessee/TN
+      48    -    Texas/TX
+      49    -    Utah/UT
+      50    -    Vermont/VT
+      51    -    Virginia/VA
+      53    -    Washington/WA
+      54    -    West Virginia/WV
+      55    -    Wisconsin/WI
+      56    -    Wyoming/WY
+      72    -    Puerto Rico/PR
+
+**ADJINC**
+
+Adjustment factor for income and earnings dollar amounts (6 implied decimal places). This is a character field of length 7. In order to get the proper adjustment factor, this value must be divided by 6. The adjustment factor for each year is defined as given below:
+
+      1061971 -    2013 factor 
+      1045195 -    2014 factor 
+      1035988 -    2015 factor 
+      1029257 -    2016 factor 
+      1011189 -    2017 factor 
+
+
+**PWGTP**
+
+This is the Person weight stored as Numeric(5).  This can take values 00001..09999. Person weight is the actual number of people,  a record in the data file represent. In  case , someone wants to get  count of a field, then value of person weight should  be summed up and taken as count whereas for numeric fields,  value of field should be multiplied by person weight.
+
+**AGEP**
+
+Age of a person. It is a numeric field of length 2.  This field is top coded. Values are defined as per below rule
+
+      00   -   .Under 1 year
+      01..99  - 1 to 99 years (Top-coded)
+
+
+*CIT* 
+
+Citizenship status. This is character field of size 1. The values are defined as below
+
+      1  -  Born in the U S.
+      2  -  Born in Puerto Rico, Guam, the U.S. Virgin Islands, or the .Northern Marianas
+      3  -  Born abroad of American parent(s)
+      4  -  U.S. citizen by naturalization
+      5  -  Not a citizen of the U.S.
+
+**DDRS**
+
+Self-care difficulty. A character field of length 1. Values are defined as below:
+
+
+      b("")  - N/A (Less than 5 years old)
+      1   - Yes
+      2   - No
+
+**DREM**
+
+Cognitive  difficulty. A character field of length 1. Values are defined as below:
+
+      b("")  - N/A (Less than 5 years old)
+      1   - Yes
+      2   - No
+
+**DPHY**
+
+Ambulatory difficulty. A character field of length 1. Values are defined as below:
+
+      b("")  - N/A (Less than 5 years old)
+      1   - Yes
+      2   - No
+
+
+**DOUT**
+
+Independent living difficulty. A character field of length 1. Values are defined as below:
+
+      b("")  - N/A (Less than 15 years old)
+      1   - Yes
+      2   - No
+
+**DEYE**
+
+Vision difficulty. A character field of length 1. Values are defined as below:
+
+    1   - Yes
+    2   - No
+
+**DEAR**
+
+Hearing difficulty. A character field of length 1. Values are defined as below:
+
+    1   - Yes
+    2   - No
+
+**DIS**
+
+Disability recode.  A character field of length 1. Values are defined as below:
+
+
+    1   - With a disability
+    2   - Without a disability
+
+**ENG**
+
+Ability to speak English. A character field of length 1. Values are defined as below:
+
+    b("")  - N/A (less than 5 years old/speaks only English)
+    1   - Very well
+    2   - Well
+    3   - Not well
+    4   - Not at all
+
+**INTP**
+
+Interest, dividends, and net rental income past 12 months. It is a numeric field of length 6. This will be taken as  loss in income in case it is negative.  This field is top coded. Values are defined as per below rule:
+
+    bbbbb("")    - N/A (less than 15 years old)
+    00000     - None
+    -09999..-00001  - Loss $1 to $9999 (Rounded and bottom-coded)
+    000001    - $1 or break even
+    000002..999999  - $2 to $999999 (Rounded and top-coded) 
+
+**OIP**
+
+All other income past 12 months. It is a numeric field of length 6. This field is top coded. Values are defined as per below rule:
+
+    bbbbb("")    - N/A (less than 15 years old)
+    00000     - None
+    000001..999999  - $1 to $999999 (Rounded and top-coded) 
+
+**RETP**
+
+Retirement income past 12 months. It is a numeric field of length 6. This field is top coded. Values are defined as per below rule:
+
+    bbbbb("")    - N/A (less than 15 years old)
+    00000     - None
+    000001..999999  - $1 to $999999 (Rounded and top-coded) 
+
+**SEMP**
+
+Self-employment income past 12 months. It is a numeric field of length 6. This will be taken as  loss in income in case it is negative.  This field is top coded. Values are defined as per below rule:
+
+    bbbbb("")        - N/A (less than 15 years old)
+    00000           - None
+    -09999..-00001  - Loss $1 to $9999 (Rounded and bottom-coded)
+    000001    - $1 or break even
+    000002..999999  - $2 to $999999 (Rounded and top-coded) 
+
+**WAGP**
+
+Wages or salary  income past 12 months. It is a numeric field of length 6. This field is top coded. Values are defined as per below rule:
+
+    bbbbb("")    - N/A (less than 15 years old)
+    00000     - None
+    000001..999999  - $1 to $999999 (Rounded and top-coded) 
+
+**PINCP**
+
+Total person's income past 12 months. It is a numeric field of length 6. This will be taken as  loss in income in case it is negative.  This field is top coded. Values are defined as per below rule:
+
+    bbbbb("")   -  N/A (less than 15 years old)
+    00000    -  None
+    -019998     -  Loss of $19999 or more (Rounded & bottom-coded .components)
+    -000001..-019997  - Loss $1 to $19997 (Rounded components)
+    000001   - $1 or break even
+    0000002..4209995  - $2 to $0000002..4209995 (Rounded and top-coded) 
+
+**SEX**
+
+Sex. A character field of length 1. Values are defined as below:
+
+    1   -  Male
+    2   -  Female
+
+**SCHL**
+
+Educational attainment. This a character field of length 2. Each  status is assigned a specified code. 
+
+    bb("")   N/A (less than 3 years old)
+    01  - No schooling completed
+    02  - Nursery school, preschool
+    03  - Kindergarten
+    04  - Grade 1
+    05  - Grade 2
+    06  - Grade 3
+    07  - Grade 4
+    08  - Grade 5
+    09  - Grade 6
+    10  - Grade 7
+    11  - Grade 8
+    12  - Grade 9
+    13  - Grade 10
+    14  - Grade 11
+    15  - 12th grade - no diploma
+    16  - Regular high school diploma
+    17  - GED or alternative credential
+    18  - Some college, but less than 1 year
+    19  - 1 or more years of college credit, no degree
+    20  - Associate's degree
+    21  - Bachelor's degree
+    22  - Master's degree
+    23  - Professional degree beyond a bachelor's degree
+    24  - Doctorate degree
+
+
+
+
+
+
+
